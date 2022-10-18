@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-kube
+spec:
+  selector:
+    app: hello-kube
+  type: NodePort # type NodePort
+  ports:
+    - port: 80
+      targetPort: 3000
+      nodePort: 30124 # port of the worker node
+--- # divide multiple yaml configuration
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: hello-rc
+spec:
+  replicas: 2 # number of the pod
+  selector: # The pod selector determining what pods the RC is operating on
+    app: hello-kube # label value
+  template: # pod template
+    metadata:
+      labels:
+        app: hello-kube # label value
+    spec:
+      containers:
+      - image: tqt1997/third-app:v3 # image used to run container
+        name: hello-kube # name of the container
+        ports:
+          - containerPort: 3000 # pod of the container
+        volumeMounts:
+          - mountPath: /app/story
+            name: story-volume
+      volumes:
+        - name: story-volume
+          persistentVolumeClaim:
+            claimName: host-pvc3
+
+--- #PV
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: host-pv2
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /data/volumes/pv1
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - k8s-worker #select node want to use the persistent volume
+--- #PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: host-pvc3
+spec:
+  volumeName: host-pv2
+  resources:
+    requests:
+      storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: local-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
